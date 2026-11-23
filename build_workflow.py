@@ -230,14 +230,14 @@ def user_configuration():
             "type": "checkbox",
             "variable": "favicons",
             "label": "Website icons",
-            "description": "Download each site's icon to show it in the results. Requests go straight to each site, never to a third-party icon service.",
+            "description": "Download each site's icon to show it in the results. Requests go straight to each site; no third-party icon service is used unless you turn on the option below.",
             "config": {"default": True, "required": False, "text": "Show website icons"},
         },
         {
             "type": "checkbox",
             "variable": "favicons_fallback",
             "label": "Missing icons",
-            "description": "Some sites block automated requests (Cloudflare, Akamai...). Ask DuckDuckGo's free icon service for those only. DuckDuckGo then learns which of these sites you have accounts on.",
+            "description": "Some sites answer but don't give their icon (bot protection such as Cloudflare, or pages built by scripts). Ask DuckDuckGo's free icon service for those sites only; DuckDuckGo then learns which of them you have accounts on. Sites that are down, unknown or internal (intranet, VPN) are never sent.",
             "config": {"default": False, "required": False, "text": "Fill missing icons from DuckDuckGo"},
         },
         {
