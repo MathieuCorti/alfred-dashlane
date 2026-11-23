@@ -1,17 +1,21 @@
 """Script Filter: the fields of one credential (opened with ↩ on a search result).
 
-The credential id comes from the `item_id` variable. ↩ copies a field, ⌘↩
-pastes it into the frontmost app. Alfred filters the list as you type.
+The credential id comes from the `item_id` variable, set by the Arg and Vars
+utility in front of this Script Filter. ↩ copies a field, ⌘↩ pastes it into
+the frontmost app.
 """
 
 import os
+import sys
 
-from dashlane import alfred, cache, config
+from dashlane import alfred, cache, config, dcli
 
 HINT = "↩ copy · ⌘↩ paste"
 
 
-def field(entry, key, title, subtitle, icon, match, open_url=False):
+def field(entry, key, title, subtitle, paste_subtitle, icon, match, shown=None, open_url=False):
+    """A field row. `shown` is what ⌘C / Large Type use (never a secret)."""
+    shown = shown or entry["title"]
     item = {
         "uid": f"field-{key}",
         "title": title,
@@ -19,27 +23,20 @@ def field(entry, key, title, subtitle, icon, match, open_url=False):
         "arg": entry["id"],
         "match": match,
         "icon": {"path": config.icon(icon)},
-        "variables": {"action": f"copy:{key}", "item_id": entry["id"]},
+        "text": {"copy": shown, "largetype": shown},
+        "variables": {"action": f"copy:{key}"},
         "mods": {
-            "cmd": {
-                "subtitle": f"Paste into the frontmost app · {subtitle.split(' · ')[0]}",
-                "arg": entry["id"],
-                "variables": {"action": f"paste:{key}", "item_id": entry["id"]},
-            },
+            "cmd": {"subtitle": paste_subtitle, "arg": entry["id"], "variables": {"action": f"paste:{key}"}},
         },
     }
     if open_url:
-        item["mods"]["alt"] = {
-            "subtitle": f"Open {entry['url']}",
-            "arg": entry["id"],
-            "variables": {"action": "open-url", "item_id": entry["id"]},
-        }
+        item["mods"]["alt"] = {"subtitle": f"Open {entry['url']}", "arg": entry["id"], "variables": {"action": "open-url"}}
         item["quicklookurl"] = entry["url"]
     return item
 
 
 def command(entry, key, title, subtitle, icon, action, match):
-    variables = {"action": action, "item_id": entry["id"]}
+    variables = {"action": action}
     return {
         "uid": f"field-{key}",
         "title": title,
@@ -47,6 +44,7 @@ def command(entry, key, title, subtitle, icon, action, match):
         "arg": entry["id"],
         "match": match,
         "icon": {"path": config.icon(icon)},
+        "text": {"copy": entry["title"], "largetype": entry["title"]},
         "variables": variables,
         "mods": {"cmd": {"subtitle": subtitle, "arg": entry["id"], "variables": variables}},
     }
@@ -54,36 +52,51 @@ def command(entry, key, title, subtitle, icon, action, match):
 
 def build(entry):
     name = entry["title"]
-    items = []
-    if entry["login"]:
-        items.append(field(entry, "login", entry["login"], f"Login · {HINT}", "field-login", f"login email {entry['login']}"))
-    items.append(field(entry, "password", "Password", f"{name} · {HINT}", "credential", "password"))
-    if entry["otp"]:
-        items.append(field(entry, "otp", "2FA code", f"{name} · {HINT}", "credential-otp", "2fa otp code totp"))
-    if entry["url"]:
-        items.append(
-            field(entry, "url", entry["url"], f"Website · {HINT} · ⌥↩ open", "field-url", f"website url {entry['url']}", open_url=True)
+    paste = "Paste into the frontmost app"
+    rows = []
+    if entry.get("login"):
+        login = entry["login"]
+        rows.append(field(entry, "login", login, f"Login · {HINT}", f"{paste}: login", "field-login", f"login email {login}", shown=login))
+    rows.append(field(entry, "password", "Password", f"{name} · {HINT}", f"{paste}: password", "credential", "password"))
+    if entry.get("otp"):
+        rows.append(field(entry, "otp", "2FA code", f"{name} · {HINT}", f"{paste}: 2FA code", "credential-otp", "2fa otp code totp"))
+    if entry.get("url"):
+        url = entry["url"]
+        rows.append(
+            field(entry, "url", url, f"Website · {HINT} · ⌥↩ open", f"{paste}: website", "field-url", f"website url {url}", shown=url, open_url=True)
         )
     if entry.get("secondary_login"):
         login = entry["secondary_login"]
-        items.append(field(entry, "username", login, f"Username · {HINT}", "field-login", f"username {login}"))
+        rows.append(field(entry, "username", login, f"Username · {HINT}", f"{paste}: username", "field-login", f"username {login}", shown=login))
     if entry.get("has_note"):
-        items.append(field(entry, "note", "Note", f"{name} · {HINT}", "note", "note"))
-    items.append(
-        command(entry, "type", "Type login ⇥ password", "Type them into the frontmost app", "field-type", "type", "type autofill fill")
-    )
-    items.append(
-        command(entry, "card", "Show item card", "Login, password, live 2FA code and website", "field-card", "card", "card show details")
-    )
-    return items
+        rows.append(field(entry, "note", "Note", f"{name} · {HINT}", f"{paste}: note", "note", "note"))
+    rows.append(command(entry, "type", "Type login ⇥ password", "Type them into the frontmost app", "field-type", "type", "type autofill fill"))
+    rows.append(command(entry, "card", "Show item card", "Login, password, live 2FA code and website", "field-card", "card", "card show details"))
+    return rows
 
 
-def main():
-    entry = cache.find_credential(os.environ.get("item_id", ""))
+def matches(row, words):
+    haystack = f"{row['title']} {row['match']}".lower()
+    return all(word in haystack for word in words)
+
+
+def main(query):
+    entries, state, refreshing = alfred.prepare(cache.CREDENTIALS)
+    if entries is None:
+        return alfred.output_unavailable(state, refreshing)
+    item_id = dcli.bare_id(os.environ.get("item_id", ""))
+    entry = next((e for e in entries if e.get("id") == item_id), None)
     if not entry:
-        return alfred.output([alfred.info_item("Item not found", "Sync your vault and try again", icon="warning")])
-    alfred.output(build(entry))
+        return alfred.output(
+            [alfred.action_item("Item not found", "It may have been deleted. ↩ to sync your vault", "sync", icon="warning")]
+        )
+    words = query.lower().split()
+    rows = [row for row in build(entry) if matches(row, words)]
+    if not rows:
+        hint = f"{entry['title']}: try login, password, 2fa, website…"
+        rows = [alfred.info_item(f"No field matches “{query.strip()}”", hint, icon="search")]
+    alfred.output(rows)
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else "")

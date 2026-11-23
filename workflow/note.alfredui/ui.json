@@ -1,5 +1,5 @@
 {
-  "bundleid": "com.mathieucorti.alfred.dashlane.note",
+  "bundleid": "com.motystudio.dashlane.note",
   "variablesconfig": {
     "item_id": { "src": "args[0]", "scriptenv": true },
     "clear_clipboard_after": { "src": "variable", "scriptenv": true },

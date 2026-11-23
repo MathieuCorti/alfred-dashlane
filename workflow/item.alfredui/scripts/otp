@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Pulse script (every second): live 2FA code with its countdown.
 
-Usage: otp <item_id> <expires_at> <period>
+Usage: otp <item_id> <expires_at> <period> <had_error>
 dcli is only called when the current code has expired.
 """
 
@@ -14,42 +14,71 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from dashlane import cache, dcli, ui  # noqa: E402
 
+PLACEHOLDER = "··· ···"
+RETRY_AFTER = 5
+URGENT = "systemOrangeColor"
+NORMAL_RING = "controlAccentColor"
+
 
 def pretty(code):
-    return f"{code[:3]} {code[3:]}" if len(code) == 6 else code
+    if len(code) == 6:
+        return f"{code[:3]} {code[3:]}"
+    if len(code) == 8:
+        return f"{code[:4]} {code[4:]}"
+    return code
 
 
-def main(item_id, expires_at, period):
-    now = time.time()
+def fetch(item_id, had_error):
+    """Read a new code. Returns (actions, ids, expires, period) or a final error payload."""
+    entry = cache.find_credential(item_id)
+    if not entry or not entry.get("otp"):
+        return {"pulse": {"interval": 0}, "update": {"ids": {"otp_code": {"text": PLACEHOLDER}}}}, None
+    try:
+        code, remaining = dcli.read_otp(item_id, entry["otp"])
+    except dcli.DcliError as error:
+        ui.record_login_error(error)
+        payload = ui.status(ui.error_text(error), error=True)
+        payload["update"]["ids"]["otp_code"] = {"text": PLACEHOLDER}
+        payload["update"]["ids"]["otp_seconds"] = {"text": ""}
+        if error.kind in dcli.NEEDS_LOGIN or error.kind == dcli.MISSING:
+            payload["pulse"] = {"interval": 0}
+        else:
+            # Transient failure: never leave an expired code on screen, retry shortly.
+            payload["variables"] = {"otp_expires": str(time.time() + RETRY_AFTER), "otp_error": "1"}
+        return payload, None
+    # Measure after the (slow) dcli call so the countdown matches the real expiry.
+    expires = time.time() + remaining
+    period = max(30, 30 * math.ceil(remaining / 30))
+    ids = {"otp_code": {"text": pretty(code)}}
+    if had_error:
+        ids["status"] = {"text": "", "colour": ui.SECONDARY}
+    variables = {"otp_expires": str(expires), "otp_period": str(period), "otp_error": ""}
+    return {"variables": variables}, (ids, expires, period)
+
+
+def main(item_id, expires_at, period, had_error):
     try:
         expires = float(expires_at)
         period = int(period)
     except ValueError:
-        expires, period = 0, 30
+        expires, period = 0.0, 30
 
-    actions = {}
-    ids = {}
-    if expires - now <= 0:
-        entry = cache.find_credential(item_id)
-        if not entry or not entry["otp"]:
-            return ui.emit({"pulse": {"interval": 0}})
-        try:
-            code, remaining = dcli.read_otp(item_id, entry["otp"])
-        except dcli.DcliError as error:
-            return ui.emit({**ui.status(ui.error_text(error), error=True), "pulse": {"interval": 0}})
-        period = 30 if remaining <= 30 else 60
-        expires = now + remaining
-        actions["variables"] = {"otp_expires": str(expires), "otp_period": str(period)}
-        ids["otp_code"] = {"text": pretty(code)}
+    actions, ids = {}, {}
+    # After a failure, expires is set RETRY_AFTER seconds ahead, so this also retries.
+    if expires - time.time() <= 0:
+        actions, fetched = fetch(item_id, had_error == "1")
+        if fetched is None:
+            return ui.emit(actions)
+        ids, expires, period = fetched
 
-    remaining = max(0, math.ceil(expires - now))
+    remaining = max(0, math.ceil(expires - time.time()))
     urgent = remaining <= 5
-    ids["otp_progress"] = {"progress": remaining / period, "colour": "systemOrangeColor" if urgent else None}
-    ids["otp_seconds"] = {"text": f"{remaining} s", "colour": "systemOrangeColor" if urgent else ui.SECONDARY}
+    ids["otp_progress"] = {"progress": min(1.0, remaining / period), "colour": URGENT if urgent else NORMAL_RING}
+    ids["otp_seconds"] = {"text": f"{remaining} s", "colour": URGENT if urgent else ui.SECONDARY}
     actions["update"] = {"ids": ids}
     ui.emit(actions)
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:] + ["", "", ""]
-    main(args[0], args[1], args[2])
+    args = sys.argv[1:] + ["", "", "", ""]
+    main(args[0], args[1], args[2], args[3])

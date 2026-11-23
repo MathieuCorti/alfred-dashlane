@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 """Secure note card: shows the note content and copies it.
 
+Notes marked "secured" in Dashlane open hidden and are only read when the user
+asks to show them.
+
 Usage: note <command> <item_id>
 """
 
@@ -12,14 +15,36 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from dashlane import cache, dcli, system, ui  # noqa: E402
 
 RETURN = "↩︎"
+HIDDEN = "This note is secured in Dashlane. Press ⌘R to show it."
+
+
+def read_content(entry):
+    try:
+        return dcli.read(entry["id"], "content"), None
+    except Exception as error:
+        ui.record_login_error(error)
+        return "", ui.error_text(error)
 
 
 def build(entry):
-    try:
-        content, error = dcli.read(entry["id"], "content"), None
-    except Exception as exc:
-        content, error = "", ui.error_text(exc)
+    secured = entry.get("secured", False)
+    content, error = (HIDDEN, None) if secured else read_content(entry)
 
+    buttons = []
+    if secured:
+        buttons.append(
+            {
+                **ui.text_button("Show", ui.script_action("note", "show", "{var:item_id}"), shortcut="⌘R"),
+                "id": "show",
+                "tooltip": "Show the secured note (⌘R)",
+            }
+        )
+    buttons.append(
+        {
+            **ui.text_button("Copy note", ui.script_action("note", "copy", "{var:item_id}"), shortcut=RETURN),
+            "tooltip": "Copy the note content (↩)",
+        }
+    )
     footer = {
         "type": "view",
         "layout": "border",
@@ -28,23 +53,20 @@ def build(entry):
                 **ui.label(error or "", id="status", colour="systemRedColor" if error else ui.SECONDARY),
                 "constraints": {"region": "centre", "position": "left", "stretch": "horizontal"},
             },
-            {
-                **ui.text_button("Copy note", ui.script_action("note", "copy", "{var:item_id}"), shortcut=RETURN, enabled=not error),
-                "tooltip": "Copy the note content (↩)",
-                "constraints": {"region": "right"},
-            },
+            {**ui.inline(buttons, spacing=8), "constraints": {"region": "right"}},
         ],
     }
     card = ui.inline(
         [
-            ui.header("note.text", "systemYellowColor", entry["title"], "Secure note"),
+            ui.header("note.text", "systemYellowColor", entry["title"], "Secured note" if secured else "Secure note"),
             ui.separator(),
             {
                 "id": "content",
                 "type": "textarea",
                 "text": content,
                 "editable": False,
-                "selectable": True,
+                "selectable": not secured,
+                "colour": ui.SECONDARY if secured else None,
                 "font": {"size": 13},
                 "constraints": {"size": {"height": 280}},
             },
@@ -60,13 +82,31 @@ def build(entry):
 def main(command, item_id):
     entry = cache.find_note(item_id)
     if not entry:
-        return ui.emit({"replace": {"ids": {"card": ui.label("This note is not in the local cache any more. Sync your vault and try again.")}}})
+        message = "This note is not in the local list any more. Sync your vault and try again."
+        if command == "load":
+            return ui.emit({"replace": {"ids": {"card": ui.label(message)}}})
+        return ui.emit(ui.status(message, error=True))
     if command == "load":
         return ui.emit(build(entry))
+    if command == "show":
+        content, error = read_content(entry)
+        if error:
+            return ui.emit(ui.status(error, error=True))
+        return ui.emit(
+            {
+                "update": {
+                    "ids": {
+                        "content": {"text": content, "selectable": True, "colour": None},
+                        "show": {"enabled": False},
+                    }
+                }
+            }
+        )
     if command == "copy":
         try:
             seconds = system.copy(dcli.read(item_id, "content"))
         except Exception as error:
+            ui.record_login_error(error)
             return ui.emit(ui.status(ui.error_text(error), error=True))
         return ui.emit(ui.status(f"Note copied · {system.clears_in(seconds) or 'clipboard is not cleared'}"))
     return ui.emit({})

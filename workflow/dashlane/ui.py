@@ -3,7 +3,7 @@
 import json
 import sys
 
-from . import dcli
+from . import cache, dcli
 
 SECONDARY = "secondaryLabelColor"
 MASK = "••••••••••••"
@@ -91,7 +91,8 @@ def field_row(name, value, buttons, stretch=True):
     ]
 
 
-def header(symbol, tint, title, subtitle):
+def header(symbol, tint, title, subtitle, image=None):
+    """Card header. `image` (an IMAGE object) replaces the tinted SF Symbol."""
     return {
         "type": "view",
         "layout": "border",
@@ -99,8 +100,8 @@ def header(symbol, tint, title, subtitle):
         "components": [
             {
                 "type": "imageview",
-                "contenttintcolour": tint,
-                "image": {"type": "symbol", "src": symbol, "size": {"width": 30}},
+                "contenttintcolour": None if image else tint,
+                "image": image or {"type": "symbol", "src": symbol, "size": {"width": 30}},
                 "constraints": {"region": "left", "position": "centre"},
             },
             {
@@ -124,6 +125,12 @@ def separator():
 
 def status(text, error=False):
     return {"update": {"ids": {"status": {"text": text, "colour": "systemRedColor" if error else SECONDARY}}}}
+
+
+def record_login_error(error):
+    """Let the keyword search offer the login/unlock fix the status line points to."""
+    if isinstance(error, dcli.DcliError) and (error.kind in dcli.NEEDS_LOGIN or error.kind == dcli.MISSING):
+        cache.record_error(error)
 
 
 def error_text(error):

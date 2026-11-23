@@ -4,7 +4,7 @@ import os
 import shutil
 from pathlib import Path
 
-BUNDLE_ID = "com.mathieucorti.alfred.dashlane"
+BUNDLE_ID = "com.motystudio.dashlane"
 WORKFLOW_DIR = Path(__file__).resolve().parent.parent
 ICONS_DIR = WORKFLOW_DIR / "icons"
 

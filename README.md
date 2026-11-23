@@ -43,21 +43,27 @@ The card is a native Alfred UI view that shows the login, website and a live 2FA
 * ↩ Show the note
 * ⌘↩ Copy its content
 
+Notes marked as secured in Dashlane open hidden in the card: press ⌘R to show them.
+
 ## External triggers
 
 Open a card from AppleScript or another workflow with an item id:
 
 ```applescript
-tell application id "com.runningwithcrayons.Alfred" to run trigger "card" in workflow "com.mathieucorti.alfred.dashlane" with argument "ITEM-ID"
+tell application id "com.runningwithcrayons.Alfred" to run trigger "card" in workflow "com.motystudio.dashlane" with argument "ITEM-ID"
 ```
 
 The `fields` trigger opens the item's field list, and `note` opens a secure note.
 
 ## Security
 
-* Passwords, 2FA codes and notes are read from the Dashlane CLI only when you use them. The workflow caches titles, logins and websites only, in a file only your user can read.
-* Copied secrets are marked as concealed so clipboard managers, Alfred's Clipboard History included, don't record them. They are cleared from the clipboard after the configured delay, unless you copied something else meanwhile. A pasted secret leaves the clipboard 2 seconds after the paste.
+* Passwords, 2FA codes and notes are read from the Dashlane CLI only when you use them. The workflow caches titles, logins and websites only, in files only your user can read.
+* Copied secrets stay on this Mac (no Universal Clipboard) and are marked as concealed, so clipboard managers, Alfred's Clipboard History included, don't record them. They are cleared from the clipboard after the configured delay, unless you copied something else meanwhile.
+* Pasting (⌘↩ in the item fields) puts your previous clipboard back right after the paste.
+* Only http and https websites are opened.
 * Logging in and unlocking happen in Terminal: your master password never goes through Alfred.
+
+Typing and pasting need Alfred to have Accessibility access (System Settings › Privacy & Security › Accessibility).
 
 ## Development
 

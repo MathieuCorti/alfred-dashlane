@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from dashlane import cache, dcli, system, ui  # noqa: E402
+from dashlane import cache, dcli, items, system, ui  # noqa: E402
 
 RETURN = "↩︎"
 
@@ -44,7 +44,7 @@ def build(entry):
                         "··· ···",
                         id="otp_code",
                         font={"size": 17, "monospaced": "digits", "weight": "semibold"},
-                        constraints={"size": {"width": 84}, "position": "left"},
+                        constraints={"size": {"width": 104}, "position": "left"},
                     ),
                     {"id": "otp_progress", "type": "progress", "style": "round", "progress": 0, "constraints": {"size": 16, "position": "centre"}},
                     ui.label(
@@ -63,7 +63,7 @@ def build(entry):
     rows += ui.field_row(
         "Website",
         ui.label(url or "—", selectable=bool(url), linebreak="truncatemiddle"),
-        [ui.icon_button("safari", "Open website (⌘O)", ui.finish_action("open-url"), shortcut="⌘O", enabled=bool(url))],
+        [ui.icon_button("safari", "Open website (⌘O)", ui.finish_action("open-url"), shortcut="⌘O", enabled=bool(items.web_url(url)))],
     )
 
     footer = {
@@ -81,7 +81,13 @@ def build(entry):
 
     card = ui.inline(
         [
-            ui.header("key.fill", "systemTealColor", entry["title"], entry["domain"]),
+            ui.header(
+                "key.fill",
+                "systemTealColor",
+                entry["title"],
+                entry["domain"],
+                image={"type": "file", "src": "../icon.png", "size": {"width": 36}},
+            ),
             ui.separator(),
             {"type": "view", "layout": "form", "spacing": 10, "components": rows},
             ui.separator(),
@@ -92,10 +98,10 @@ def build(entry):
     )
     actions = {"replace": {"ids": {"card": card}}}
     if has_otp:
-        actions["variables"] = {"otp_expires": "", "otp_period": "30"}
+        actions["variables"] = {"otp_expires": "", "otp_period": "30", "otp_error": ""}
         actions["pulse"] = {
             "src": "scripts/otp",
-            "args": ["{var:item_id}", "{var:otp_expires}", "{var:otp_period}"],
+            "args": ["{var:item_id}", "{var:otp_expires}", "{var:otp_period}", "{var:otp_error}"],
             "interval": 1,
             "intervalmode": "regular",
             "now": True,
@@ -113,17 +119,19 @@ def main(command, item_id, extra=""):
     if command == "load":
         return ui.emit(build(entry))
 
+    copy_fields = {"copy-password": "password", "copy-login": "login", "copy-otp": "otp"}
     try:
-        if command == "copy-password":
-            seconds = system.copy(dcli.read(item_id, "password"))
-            return ui.emit(ui.status(f"Password copied · {system.clears_in(seconds) or 'clipboard is not cleared'}"))
-        if command == "copy-login":
-            system.copy(entry["login"], secret=False)
-            return ui.emit(ui.status("Login copied"))
-        if command == "copy-otp":
-            code, remaining = dcli.read_otp(item_id, entry["otp"])
-            system.copy(code)
-            return ui.emit(ui.status(f"2FA code copied · valid for {remaining} s"))
+        if command in copy_fields:
+            field = copy_fields[command]
+            name = items.FIELD_NAMES[field]
+            value, secret, detail = items.field_value(entry, field)
+            if not value:
+                return ui.emit(ui.status(f"This item has no {name.lower()}", error=True))
+            seconds = system.copy(value, secret=secret)
+            details = [f"{name} copied", detail]
+            if secret:
+                details.append(system.clears_in(seconds) or "clipboard is not cleared")
+            return ui.emit(ui.status(" · ".join(part for part in details if part)))
         if command == "reveal":
             if extra == "1":
                 text, symbol, revealed = ui.MASK, "eye", "0"
@@ -141,6 +149,7 @@ def main(command, item_id, extra=""):
                 }
             )
     except Exception as error:
+        ui.record_login_error(error)
         return ui.emit(ui.status(ui.error_text(error), error=True))
     return ui.emit({})
 

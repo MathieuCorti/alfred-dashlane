@@ -21,7 +21,7 @@ def credential_item(entry):
             "subtitle": subtitle,
             "arg": entry["id"],
             "valid": valid,
-            "variables": {"action": action, "item_id": entry["id"]},
+            "variables": {"action": action},
         }
 
     item = {
@@ -32,7 +32,7 @@ def credential_item(entry):
         "autocomplete": entry["title"],
         "icon": {"path": config.icon("credential-otp" if has_otp else "credential")},
         "text": {"copy": login, "largetype": login or entry["title"]},
-        "variables": {"action": "fields", "item_id": entry["id"]},
+        "variables": {"action": "fields"},
         "mods": {
             "cmd": mod("Copy the password", "copy:password"),
             "alt": mod("Show item card", "card"),

@@ -19,8 +19,11 @@ BUILD_DIR = ROOT / "build" / "Dashlane"
 DIST_DIR = ROOT / "dist"
 
 VERSION = "1.0.0"
-BUNDLE_ID = "com.mathieucorti.alfred.dashlane"
-INSTALL_FOLDER = "user.workflow.dashlane-mathieucorti"
+BUNDLE_ID = "com.motystudio.dashlane"
+INSTALL_FOLDER = "user.workflow.dashlane-motystudio"
+# Folders of earlier dev installs: their prefs.plist (user configuration) is
+# carried over, then they are removed so only one copy of the workflow is loaded.
+LEGACY_INSTALL_FOLDERS = ["user.workflow.dashlane-mathieucorti"]
 
 # Object uids (stable so Alfred keeps knowledge and positions across builds).
 SF_SEARCH = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C01"
@@ -268,7 +271,9 @@ def build_info_plist():
             "type": "alfred.workflow.action.script",
             "version": 2,
             "config": {
-                "concurrently": False,
+                # Concurrent: a long sync must not hold back a paste or a typing
+                # action, which would then land in whatever app is in front later.
+                "concurrently": True,
                 "escaping": 102,
                 "script": '/usr/bin/python3 action.py "$1"',
                 "scriptargtype": 1,
@@ -338,7 +343,7 @@ def build_info_plist():
         "bundleid": BUNDLE_ID,
         "category": "Productivity",
         "connections": connections,
-        "createdby": "Mathieu Corti",
+        "createdby": "Moty Studio",
         "description": "Search your Dashlane vault: passwords, 2FA codes and secure notes",
         "disabled": False,
         "name": "Dashlane",
@@ -377,20 +382,38 @@ def alfred_workflows_dir():
 
 
 def install():
-    target = alfred_workflows_dir() / INSTALL_FOLDER
+    workflows = alfred_workflows_dir()
+    target = workflows / INSTALL_FOLDER
     target.mkdir(exist_ok=True)
+    for legacy in LEGACY_INSTALL_FOLDERS:
+        old = workflows / legacy
+        if not old.is_dir():
+            continue
+        if (old / "prefs.plist").exists() and not (target / "prefs.plist").exists():
+            shutil.copy2(old / "prefs.plist", target / "prefs.plist")
+        shutil.rmtree(old)
+        print(f"Removed the previous install {old}")
     # Keep prefs.plist: Alfred stores the user's configuration there.
     subprocess.run(
         ["rsync", "-a", "--delete", "--exclude", "prefs.plist", f"{BUILD_DIR}/", f"{target}/"],
         check=True,
     )
-    # Make Alfred pick up the new info.plist right away.
-    subprocess.run(
-        ["osascript", "-e", f'tell application id "com.runningwithcrayons.Alfred" to reload workflow "{BUNDLE_ID}"'],
-        check=False,
-        capture_output=True,
-    )
+    reload_in_alfred()
     return target
+
+
+def reload_in_alfred():
+    """Make a running Alfred pick up the new info.plist right away."""
+    if subprocess.run(["pgrep", "-x", "Alfred"], capture_output=True).returncode != 0:
+        return
+    result = subprocess.run(
+        ["osascript", "-e", f'tell application id "com.runningwithcrayons.Alfred" to reload workflow "{BUNDLE_ID}"'],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 and "not found" not in result.stderr:
+        print(f"Warning: Alfred did not reload the workflow: {result.stderr.strip()}")
+    # "not found": first install of this bundle id; Alfred loads new folders on its own.
 
 
 def main():

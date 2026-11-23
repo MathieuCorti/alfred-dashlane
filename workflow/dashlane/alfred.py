@@ -118,32 +118,41 @@ def rank(entries, query, fields):
     return [r[-1] for r in ranked]
 
 
-def load_or_refresh(name, query, build):
-    """Shared Script Filter flow: serve the cache, refresh it in the background."""
+LOADING = ("Loading your Dashlane vault…", "Reading items from the Dashlane CLI")
+
+
+def prepare(name):
+    """Load a cached list and start a background refresh when needed.
+
+    Returns (entries, state, refreshing); entries is None when there is no cache.
+    """
     entries = cache.load(name)
     state = cache.load(cache.STATE) or {}
     if cache.should_refresh(name):
         cache.spawn_refresh()
-    refreshing = cache.refresh_running()
+    return entries, state, cache.refresh_running()
 
+
+def output_unavailable(state, refreshing):
+    """Script Filter output when there is no cached list yet."""
+    if state.get("error") and not refreshing:
+        return output(error_items(state))
+    return output([info_item(*LOADING, icon="sync")], rerun=0.3)
+
+
+def load_or_refresh(name, query, build):
+    """Shared Script Filter flow: serve the cache, refresh it in the background."""
+    entries, state, refreshing = prepare(name)
     if entries is None:
-        if refreshing:
-            return output(
-                [info_item("Loading your Dashlane vault…", "Reading items from the Dashlane CLI", icon="sync")],
-                rerun=0.3,
-            )
-        if state.get("error"):
-            return output(error_items(state))
-        cache.spawn_refresh()
-        return output([info_item("Loading your Dashlane vault…", "Reading items from the Dashlane CLI", icon="sync")], rerun=0.3)
+        return output_unavailable(state, refreshing)
 
-    items = []
-    if state.get("error"):
-        items += error_items(state)
+    errors = error_items(state) if state.get("error") else []
+    # A login problem breaks every action, so it goes first. A transient error
+    # goes last, so ↩ still picks the best match.
+    blocking = state.get("error") in dcli.NEEDS_LOGIN or state.get("error") == dcli.MISSING
     matches = build(entries, query)
-    items += matches
     utilities = utility_items(query)
-    items += utilities
+    items = (errors if blocking else []) + matches + utilities + ([] if blocking else errors)
     if not matches and not utilities and query.strip():
         items.append(info_item(f"No match for “{query.strip()}”", "Try another word, or “sync” to reload your vault", icon="search"))
     # Rerun while a background refresh is running so new items appear on their own.

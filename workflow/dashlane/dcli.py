@@ -40,8 +40,9 @@ def _env():
     return env
 
 
-def _classify(output):
-    text = ANSI.sub("", output).strip()
+def _classify(stderr, returncode):
+    # Only stderr is used: stdout may hold decrypted vault data.
+    text = ANSI.sub("", stderr).strip()
     lower = text.lower()
     if "error during authentication" in lower or "invalid device" in lower:
         return DcliError(AUTH, "Your Dashlane session is no longer valid.")
@@ -50,8 +51,8 @@ def _classify(output):
     if "email address" in lower or "not logged" in lower:
         return DcliError(LOGGED_OUT, "You are not logged in to the Dashlane CLI.")
     lines = [line for line in text.splitlines() if line.strip()]
-    message = lines[-1] if lines else "dcli failed."
-    return DcliError(FAILED, re.sub(r"^error:\s*", "", message, flags=re.I))
+    message = lines[-1] if lines else f"dcli failed (exit code {returncode})."
+    return DcliError(FAILED, re.sub(r"^error:\s*", "", message, flags=re.I)[:300])
 
 
 def run(args, timeout=30):
@@ -70,9 +71,11 @@ def run(args, timeout=30):
             env=_env(),
         )
     except subprocess.TimeoutExpired:
-        raise DcliError(TIMEOUT, "The Dashlane CLI did not answer in time.")
+        raise DcliError(TIMEOUT, "The Dashlane CLI did not answer in time.") from None
+    except (OSError, UnicodeDecodeError) as error:
+        raise DcliError(FAILED, f"Could not run dcli: {error}") from None
     if proc.returncode != 0:
-        raise _classify(proc.stderr + "\n" + proc.stdout)
+        raise _classify(proc.stderr, proc.returncode)
     return proc.stdout
 
 
@@ -99,15 +102,16 @@ def ensure_ready():
 
 
 def _list(command):
+    # With -o json, dcli prints "[]" (exit code 0) when there is no item.
+    out = run([command, "-o", "json"], timeout=120).strip()
     try:
-        out = run([command, "-o", "json"], timeout=120)
-    except DcliError as error:
-        # dcli exits with an error when the vault has no item of that type.
-        if error.kind == FAILED and "no " in error.message.lower() and "found" in error.message.lower():
-            return []
-        raise
-    out = out.strip()
-    return json.loads(out) if out else []
+        items = json.loads(out) if out else []
+    except ValueError:
+        # from None: the decode error may quote decrypted vault data.
+        raise DcliError(FAILED, f"dcli {command} returned unexpected output.") from None
+    if not isinstance(items, list):
+        raise DcliError(FAILED, f"dcli {command} returned unexpected output.")
+    return items
 
 
 def list_credentials():

@@ -1,8 +1,9 @@
-// Renders the workflow icons from SF Symbols.
+// Renders the workflow icon from the Dashlane logo and the result icons from SF Symbols.
 // Usage: swift tools/make_icons.swift <workflow dir>
 import AppKit
 
 let workflowDir = URL(fileURLWithPath: CommandLine.arguments[1])
+let logoURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("dashlane-logo.svg")
 let iconsDir = workflowDir.appendingPathComponent("icons")
 try FileManager.default.createDirectory(at: iconsDir, withIntermediateDirectories: true)
 
@@ -48,12 +49,25 @@ func drawCentered(_ image: NSImage, in rect: NSRect, offset: NSPoint = .zero) {
     ))
 }
 
-// Workflow icon: white key on a deep teal rounded square.
+// Tints an image (e.g. the black SVG logo) with a solid colour.
+func tinted(_ image: NSImage, _ color: NSColor) -> NSImage {
+    let result = NSImage(size: image.size)
+    result.lockFocus()
+    image.draw(in: NSRect(origin: .zero, size: image.size))
+    color.set()
+    NSRect(origin: .zero, size: image.size).fill(using: .sourceAtop)
+    result.unlockFocus()
+    return result
+}
+
+// Workflow icon: the white Dashlane logo on a Dashlane green rounded square.
+guard let logo = NSImage(contentsOf: logoURL) else { fatalError("Cannot load \(logoURL.path)") }
 render("icon", size: 512) { rect in
     let tile = rect.insetBy(dx: 24, dy: 24)
     let path = NSBezierPath(roundedRect: tile, xRadius: 104, yRadius: 104)
-    NSGradient(starting: hex(0x1B9C8A), ending: hex(0x0B3B45))!.draw(in: path, angle: -90)
-    drawCentered(symbol("key.horizontal.fill", pointSize: 230, colors: [.white]), in: tile)
+    NSGradient(starting: hex(0x1A5560), ending: hex(0x0E353D))!.draw(in: path, angle: -90)
+    logo.size = NSSize(width: 270, height: 270)
+    drawCentered(tinted(logo, .white), in: tile)
 }
 
 // Result icons: a symbol on a soft tinted circle.

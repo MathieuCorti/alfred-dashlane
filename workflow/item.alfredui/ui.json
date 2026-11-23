@@ -1,5 +1,5 @@
 {
-  "bundleid": "com.mathieucorti.alfred.dashlane.item",
+  "bundleid": "com.motystudio.dashlane.item",
   "variablesconfig": {
     "item_id": { "src": "args[0]", "scriptenv": true },
     "clear_clipboard_after": { "src": "variable", "scriptenv": true },
@@ -8,7 +8,8 @@
   "variables": {
     "revealed": "0",
     "otp_expires": "",
-    "otp_period": "30"
+    "otp_period": "30",
+    "otp_error": ""
   },
   "log": { "level": "warning", "internal": true },
   "window": {

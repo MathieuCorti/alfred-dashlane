@@ -11,16 +11,7 @@ import json
 import os
 import sys
 
-from dashlane import cache, dcli, system
-
-FIELD_NAMES = {
-    "login": "Login",
-    "username": "Username",
-    "password": "Password",
-    "otp": "2FA code",
-    "url": "Website",
-    "note": "Note",
-}
+from dashlane import cache, dcli, items, system
 
 
 def done(text="", title="Dashlane", next_step="notify"):
@@ -36,80 +27,60 @@ def done(text="", title="Dashlane", next_step="notify"):
     )
 
 
-def credential(item_id):
-    entry = cache.find_credential(item_id)
-    if not entry:
-        raise dcli.DcliError(dcli.FAILED, "Item not found. Try “sync”.")
-    return entry
-
-
-def field_value(entry, field):
-    """Return (value, is_secret, extra notification text) for a credential field."""
-    if field == "login":
-        return entry["login"], False, ""
-    if field == "username":
-        return entry.get("secondary_login", ""), False, ""
-    if field == "url":
-        return entry["url"], False, ""
-    if field == "password":
-        return dcli.read(entry["id"], "password"), True, ""
-    if field == "note":
-        return dcli.read(entry["id"], "note"), True, ""
-    if field == "otp":
-        if not entry["otp"]:
-            raise dcli.DcliError(dcli.FAILED, "This item has no 2FA code.")
-        code, remaining = dcli.read_otp(entry["id"], entry["otp"])
-        return code, True, f"valid for {remaining} s"
-    raise dcli.DcliError(dcli.FAILED, f"Unknown field: {field}")
-
-
 def field_action(mode, field, item_id):
-    entry = credential(item_id)
-    value, secret, extra = field_value(entry, field)
+    entry = items.credential(item_id)
+    value, secret, detail = items.field_value(entry, field)
+    name = items.FIELD_NAMES[field]
     if not value:
-        return done(entry["title"], f"No {FIELD_NAMES[field].lower()} for this item")
+        return done(entry["title"], f"This item has no {name.lower()}")
     if mode == "paste":
-        system.paste(value, secret=secret)
+        try:
+            system.paste(value, secret=secret)
+        except system.PermissionMissing as error:
+            seconds = system.copy(value, secret=secret)
+            suffix = f" · {system.clears_in(seconds)}" if secret and seconds else ""
+            return done(f"{error}{suffix}", f"{name} copied instead of pasted")
         return done()
     seconds = system.copy(value, secret=secret)
-    details = [entry["title"], extra, system.clears_in(seconds) if secret else ""]
-    return done(" · ".join(part for part in details if part), f"{FIELD_NAMES[field]} copied")
+    details = [entry["title"], detail, system.clears_in(seconds) if secret else ""]
+    return done(" · ".join(part for part in details if part), f"{name} copied")
 
 
 def main(action, arg):
     mode, _, field = action.partition(":")
-    if mode in ("copy", "paste") and field in FIELD_NAMES:
+    if mode in ("copy", "paste") and field in items.FIELD_NAMES:
         return field_action(mode, field, arg)
 
     if action == "type":
-        entry = credential(arg)
+        entry = items.credential(arg)
         system.autotype(entry["login"], dcli.read(arg, "password"))
         return done()
 
     if action == "open-url":
-        url = arg if "://" in arg else credential(arg)["url"]
-        if url:
-            system.open_url(url)
+        url = items.web_url(arg if "://" in arg else items.credential(arg)["url"])
+        if not url:
+            return done("Only http and https addresses are opened.", "Not a web address")
+        system.open_url(url)
         return done()
 
-    if action in ("copy-note", "paste-note"):
+    if action == "copy-note":
         entry = cache.find_note(arg) or {"title": "Note"}
-        content = dcli.read(arg, "content")
-        if action == "paste-note":
-            system.paste(content)
-            return done()
-        seconds = system.copy(content)
-        suffix = system.clears_in(seconds)
-        return done(f"{entry['title']}{' · ' + suffix if suffix else ''}", "Note copied")
+        seconds = system.copy(dcli.read(arg, "content"))
+        details = [entry["title"], system.clears_in(seconds)]
+        return done(" · ".join(part for part in details if part), "Note copied")
 
     if action == "sync":
         dcli.sync()
-        credentials, notes = cache.refresh()
+        result = cache.refresh(wait=150)
+        if result is None:
+            return done("Your vault was synced. The item list is still being reloaded.", "Vault synced")
+        credentials, notes = result
         return done(f"{len(credentials)} passwords · {len(notes)} notes", "Vault synced")
 
     if action == "lock":
         dcli.lock()
         cache.clear()
+        cache.record_error(dcli.DcliError(dcli.LOCKED, "Your Dashlane vault is locked."))
         return done("Your master password will be asked to unlock it", "Vault locked")
 
     if action == "login":
@@ -126,8 +97,10 @@ if __name__ == "__main__":
     try:
         main(action, arg)
     except dcli.DcliError as error:
-        if error.kind in dcli.NEEDS_LOGIN:
-            cache.save(cache.STATE, {"error": error.kind, "message": error.message, "at": 0})
+        if error.kind in dcli.NEEDS_LOGIN or error.kind == dcli.MISSING:
+            cache.record_error(error)
         done(error.message, "Dashlane error")
+    except system.PermissionMissing as error:
+        done(str(error), "Dashlane can't type")
     except Exception as error:  # Surface anything unexpected instead of failing silently.
         done(str(error), "Dashlane error")

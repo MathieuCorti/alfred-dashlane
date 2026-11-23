@@ -11,7 +11,7 @@ def note_item(entry):
     return {
         "uid": f"note-{entry['id']}",
         "title": entry["title"],
-        "subtitle": "↩ show note · ⌘↩ copy its content",
+        "subtitle": ("Secured · " if entry.get("secured") else "") + "↩ show note · ⌘↩ copy its content",
         "arg": entry["id"],
         "autocomplete": entry["title"],
         "icon": {"path": config.icon("note")},
