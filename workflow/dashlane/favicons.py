@@ -1,9 +1,10 @@
 """Website icons for credentials, downloaded straight from each site.
 
-No third-party favicon service is used: such a service would learn the list
-of every site the user has an account on. Each site is asked for its own icon,
-like a browser does on a visit. Icons are cached as 64 px PNGs; failures are
-retried after a week.
+By default no third-party favicon service is used: such a service would learn
+the list of every site the user has an account on. Each site is asked for its
+own icon, like a browser does on a visit. Sites behind bot protection can't be
+read that way; for those only, the user can opt in to DuckDuckGo's icon service.
+Icons are cached as 64 px PNGs; failures are retried after a week.
 """
 
 import base64
@@ -36,10 +37,17 @@ MAX_ICON = 1_000_000
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 # Paths many sites serve without declaring them in their HTML.
 CONVENTIONAL_PATHS = ("/apple-touch-icon.png", "/favicon.ico", "/favicon.png")
+# Free, keyless, undocumented: DuckDuckGo's own search results use it. 404 = no icon.
+DUCKDUCKGO = "https://icons.duckduckgo.com/ip3/{host}.ico"
 
 
 def enabled():
     return config.env_bool("favicons", True)
+
+
+def fallback_enabled():
+    """Opt-in: ask DuckDuckGo for the icons sites didn't give us directly."""
+    return enabled() and config.env_bool("favicons_fallback", False)
 
 
 def directory():
@@ -216,24 +224,38 @@ def _hosts_to_try(domain):
     return [".".join(labels[i:]) for i in range(0, max(1, len(labels) - 1))]
 
 
-def fetch_one(domain):
+def _fetch_direct(domain, target, workdir):
+    tried = set()
+    for host in _hosts_to_try(domain):
+        for index, source in enumerate(_icon_sources(host, workdir)):
+            if source in tried:
+                continue
+            tried.add(source)
+            raw = os.path.join(workdir, f"icon{index}")
+            if source.startswith("data:"):
+                fetched = _save_data_uri(source, raw)
+            else:
+                fetched = _curl(source, raw, MAX_ICON, ICON_TIMEOUT)
+            if fetched and _convert(raw, target, workdir):
+                return True
+    return False
+
+
+def _fetch_duckduckgo(domain, target, workdir):
+    for host in _hosts_to_try(domain):
+        raw = os.path.join(workdir, "duckduckgo.ico")
+        if _curl(DUCKDUCKGO.format(host=host), raw, MAX_ICON, ICON_TIMEOUT) and _convert(raw, target, workdir):
+            return True
+    return False
+
+
+def fetch_one(domain, direct=True, fallback=False):
     """Download and convert one domain's icon. Returns True on success."""
     target = str(directory() / f"{domain}.png")
-    tried = set()
     with tempfile.TemporaryDirectory() as workdir:
-        for host in _hosts_to_try(domain):
-            for index, source in enumerate(_icon_sources(host, workdir)):
-                if source in tried:
-                    continue
-                tried.add(source)
-                raw = os.path.join(workdir, f"icon{index}")
-                if source.startswith("data:"):
-                    fetched = _save_data_uri(source, raw)
-                else:
-                    fetched = _curl(source, raw, MAX_ICON, ICON_TIMEOUT)
-                if fetched and _convert(raw, target, workdir):
-                    return True
-    return False
+        if direct and _fetch_direct(domain, target, workdir):
+            return True
+        return bool(fallback and _fetch_duckduckgo(domain, target, workdir))
 
 
 # --- Batch fetch -------------------------------------------------------------
@@ -250,14 +272,23 @@ def _fetchable(domain):
 
 
 def _load_failed():
-    """Domains whose icon was not found, with when. Reset when the fetcher improves."""
+    """{domain: {"at": time, "fallback": bool}} for icons not found.
+
+    "fallback" tells whether DuckDuckGo was tried too. Reset when the fetcher improves.
+    """
     try:
         data = json.loads((directory() / FAILED).read_text())
     except (OSError, ValueError):
         return {}
     if not isinstance(data, dict) or data.get("version") != FETCHER_VERSION:
         return {}
-    return data.get("domains", {})
+    failed = {}
+    for domain, entry in data.get("domains", {}).items():
+        if isinstance(entry, dict):
+            failed[domain] = {"at": entry.get("at", 0), "fallback": bool(entry.get("fallback"))}
+        else:  # Older format: a bare timestamp, direct fetch only.
+            failed[domain] = {"at": entry, "fallback": False}
+    return failed
 
 
 def _save_failed(failed):
@@ -267,17 +298,21 @@ def _save_failed(failed):
     os.replace(tmp, directory() / FAILED)
 
 
-def missing_domains(domains):
+def pending_work(domains):
+    """[(domain, direct, fallback)] for icons worth trying now."""
     failed = _load_failed()
+    fallback = fallback_enabled()
     now = time.time()
     have = {path.stem for path in directory().glob("*.png")}
-    return sorted(
-        {
-            d
-            for d in domains
-            if _fetchable(d) and d not in have and now - failed.get(d, 0) >= RETRY_FAILED_AFTER
-        }
-    )
+    work = []
+    for domain in sorted({d for d in domains if _fetchable(d) and d not in have}):
+        entry = failed.get(domain)
+        if not entry or now - entry["at"] >= RETRY_FAILED_AFTER:
+            work.append((domain, True, fallback))
+        elif fallback and not entry["fallback"]:
+            # Failed directly before the fallback was turned on: only ask DuckDuckGo.
+            work.append((domain, False, True))
+    return work
 
 
 def fetch_missing():
@@ -288,26 +323,27 @@ def fetch_missing():
         return
     try:
         (directory() / CHECKED).touch()
-        domains = missing_domains(c.get("domain", "") for c in cache.load(cache.CREDENTIALS) or [])
-        if not domains:
+        work = pending_work(c.get("domain", "") for c in cache.load(cache.CREDENTIALS) or [])
+        if not work:
             return
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            results = dict(zip(domains, pool.map(_safe_fetch, domains)))
+            results = list(pool.map(_safe_fetch, work))
         failed = _load_failed()
         now = time.time()
-        for domain, ok in results.items():
+        for (domain, _, fallback), ok in zip(work, results):
             if ok:
                 failed.pop(domain, None)
             else:
-                failed[domain] = now
+                failed[domain] = {"at": now, "fallback": fallback}
         _save_failed(failed)
     finally:
         cache.release_lock(FETCH_LOCK)
 
 
-def _safe_fetch(domain):
+def _safe_fetch(job):
+    domain, direct, fallback = job
     try:
-        return fetch_one(domain)
+        return fetch_one(domain, direct=direct, fallback=fallback)
     except Exception:
         return False
 
@@ -319,7 +355,13 @@ def maybe_spawn_fetch():
     except OSError:
         checked = None
     try:
-        outdated = json.loads((config.cache_dir() / "favicons" / FAILED).read_text()).get("version") != FETCHER_VERSION
+        data = json.loads((config.cache_dir() / "favicons" / FAILED).read_text())
+        outdated = data.get("version") != FETCHER_VERSION
+        if fallback_enabled():
+            # The fallback was just turned on: earlier failures haven't tried it yet.
+            outdated = outdated or any(
+                not (isinstance(entry, dict) and entry.get("fallback")) for entry in data.get("domains", {}).values()
+            )
     except (OSError, ValueError, AttributeError):
         outdated = False
     if checked is None or checked >= CHECK_EVERY or outdated:

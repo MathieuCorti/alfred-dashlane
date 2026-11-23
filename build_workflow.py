@@ -235,6 +235,13 @@ def user_configuration():
         },
         {
             "type": "checkbox",
+            "variable": "favicons_fallback",
+            "label": "Missing icons",
+            "description": "Some sites block automated requests (Cloudflare, Akamai...). Ask DuckDuckGo's free icon service for those only. DuckDuckGo then learns which of these sites you have accounts on.",
+            "config": {"default": False, "required": False, "text": "Fill missing icons from DuckDuckGo"},
+        },
+        {
+            "type": "checkbox",
             "variable": "autotype_submit",
             "label": "Typing",
             "description": "When typing a login and password into an app (⇧↩), press Return at the end.",

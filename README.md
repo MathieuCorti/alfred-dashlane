@@ -61,7 +61,7 @@ The `fields` trigger opens the item's field list, and `note` opens a secure note
 * Copied secrets stay on this Mac (no Universal Clipboard) and are marked as concealed, so clipboard managers, Alfred's Clipboard History included, don't record them. They are cleared from the clipboard after the configured delay, unless you copied something else meanwhile.
 * Pasting (⌘↩ in the item fields) puts your previous clipboard back right after the paste.
 * Only http and https websites are opened.
-* Website icons are downloaded straight from each site, like a browser visiting it, never from a third-party icon service that would learn which sites you have accounts on. Turn them off in the workflow configuration.
+* Website icons are downloaded straight from each site, like a browser visiting it, never from a third-party icon service that would learn which sites you have accounts on. Turn them off in the workflow configuration. Sites behind bot protection (Cloudflare, Akamai...) can't be read that way: the optional “Fill missing icons from DuckDuckGo” setting asks DuckDuckGo's free icon service for those sites only, which then learns which of them you have accounts on. It is off by default.
 * Logging in and unlocking happen in Terminal: your master password never goes through Alfred.
 
 Typing and pasting need Alfred to have Accessibility access (System Settings › Privacy & Security › Accessibility).
