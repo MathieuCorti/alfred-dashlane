@@ -1,0 +1,55 @@
+#!/usr/bin/python3
+"""Pulse script (every second): live 2FA code with its countdown.
+
+Usage: otp <item_id> <expires_at> <period>
+dcli is only called when the current code has expired.
+"""
+
+import math
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from dashlane import cache, dcli, ui  # noqa: E402
+
+
+def pretty(code):
+    return f"{code[:3]} {code[3:]}" if len(code) == 6 else code
+
+
+def main(item_id, expires_at, period):
+    now = time.time()
+    try:
+        expires = float(expires_at)
+        period = int(period)
+    except ValueError:
+        expires, period = 0, 30
+
+    actions = {}
+    ids = {}
+    if expires - now <= 0:
+        entry = cache.find_credential(item_id)
+        if not entry or not entry["otp"]:
+            return ui.emit({"pulse": {"interval": 0}})
+        try:
+            code, remaining = dcli.read_otp(item_id, entry["otp"])
+        except dcli.DcliError as error:
+            return ui.emit({**ui.status(ui.error_text(error), error=True), "pulse": {"interval": 0}})
+        period = 30 if remaining <= 30 else 60
+        expires = now + remaining
+        actions["variables"] = {"otp_expires": str(expires), "otp_period": str(period)}
+        ids["otp_code"] = {"text": pretty(code)}
+
+    remaining = max(0, math.ceil(expires - now))
+    urgent = remaining <= 5
+    ids["otp_progress"] = {"progress": remaining / period, "colour": "systemOrangeColor" if urgent else None}
+    ids["otp_seconds"] = {"text": f"{remaining} s", "colour": "systemOrangeColor" if urgent else ui.SECONDARY}
+    actions["update"] = {"ids": ids}
+    ui.emit(actions)
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:] + ["", "", ""]
+    main(args[0], args[1], args[2])

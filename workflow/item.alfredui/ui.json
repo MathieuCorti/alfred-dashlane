@@ -1,0 +1,32 @@
+{
+  "bundleid": "com.mathieucorti.alfred.dashlane.item",
+  "variablesconfig": {
+    "item_id": { "src": "args[0]", "scriptenv": true },
+    "clear_clipboard_after": { "src": "variable", "scriptenv": true },
+    "dcli_path": { "src": "variable", "scriptenv": true }
+  },
+  "variables": {
+    "revealed": "0",
+    "otp_expires": "",
+    "otp_period": "30"
+  },
+  "log": { "level": "warning", "internal": true },
+  "window": {
+    "title": "Dashlane",
+    "padding": 16,
+    "root": {
+      "type": "view",
+      "layout": "inline",
+      "direction": "vertical",
+      "events": [
+        {
+          "triggers": "preload",
+          "action": { "type": "script", "src": "scripts/card", "args": ["load", "{var:item_id}"] }
+        }
+      ],
+      "components": [
+        { "id": "card", "type": "label", "text": "Loading…" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,138 @@
+#!/usr/bin/python3
+"""Credential card: builds the UI and handles its buttons.
+
+Usage: card <command> <item_id> [extra]
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from dashlane import cache, dcli, system, ui  # noqa: E402
+
+RETURN = "↩︎"
+
+
+def build(entry):
+    has_otp = bool(entry["otp"])
+    login = entry["login"]
+    url = entry["url"]
+
+    rows = []
+    rows += ui.field_row(
+        "Login",
+        ui.label(login or "—", selectable=bool(login)),
+        [ui.icon_button("doc.on.doc", "Copy login (⌘↩)", ui.script_action("card", "copy-login", "{var:item_id}"), shortcut="⌘" + RETURN, enabled=bool(login))],
+    )
+    if entry.get("secondary_login"):
+        rows += ui.field_row("Username", ui.label(entry["secondary_login"], selectable=True), [])
+    rows += ui.field_row(
+        "Password",
+        ui.label(ui.MASK, id="password", font={"monospaced": True}),
+        [
+            ui.icon_button("eye", "Reveal password (⌘R)", ui.script_action("card", "reveal", "{var:item_id}", "{var:revealed}"), shortcut="⌘R", id="reveal"),
+            ui.icon_button("doc.on.doc", "Copy password (↩)", ui.script_action("card", "copy-password", "{var:item_id}"), shortcut=RETURN),
+        ],
+    )
+    if has_otp:
+        rows += ui.field_row(
+            "2FA code",
+            ui.inline(
+                [
+                    ui.label("··· ···", id="otp_code", font={"size": "large", "monospaced": "digits", "weight": "medium"}),
+                    {"id": "otp_progress", "type": "progress", "style": "round", "progress": 0, "constraints": {"size": 16, "position": "centre"}},
+                    ui.label("", id="otp_seconds", colour=ui.SECONDARY, font={"monospaced": "digits"}, constraints={"position": "centre"}),
+                ],
+                spacing=8,
+            ),
+            [ui.icon_button("doc.on.doc", "Copy 2FA code (⌃↩)", ui.script_action("card", "copy-otp", "{var:item_id}"), shortcut="⌃" + RETURN)],
+        )
+    rows += ui.field_row(
+        "Website",
+        ui.label(url or "—", selectable=bool(url), linebreak="truncatemiddle"),
+        [ui.icon_button("safari", "Open website (⌘O)", ui.finish_action("open-url"), shortcut="⌘O", enabled=bool(url))],
+    )
+
+    footer = {
+        "type": "view",
+        "layout": "border",
+        "components": [
+            {**ui.label("", id="status", colour=ui.SECONDARY), "constraints": {"region": "centre", "position": "left", "stretch": "horizontal"}},
+            {
+                **ui.text_button("Type in app", ui.finish_action("type"), shortcut="⇧" + RETURN),
+                "tooltip": "Close and type login ⇥ password into the frontmost app (⇧↩)",
+                "constraints": {"region": "right"},
+            },
+        ],
+    }
+
+    card = ui.inline(
+        [
+            ui.header("key.fill", "systemTealColor", entry["title"], entry["domain"]),
+            ui.separator(),
+            {"type": "view", "layout": "form", "spacing": 10, "components": rows},
+            ui.separator(),
+            footer,
+        ],
+        direction="vertical",
+        spacing=14,
+    )
+    actions = {"replace": {"ids": {"card": card}}}
+    if has_otp:
+        actions["variables"] = {"otp_expires": "", "otp_period": "30"}
+        actions["pulse"] = {
+            "src": "scripts/otp",
+            "args": ["{var:item_id}", "{var:otp_expires}", "{var:otp_period}"],
+            "interval": 1,
+            "intervalmode": "regular",
+            "now": True,
+        }
+    return actions
+
+
+def main(command, item_id, extra=""):
+    entry = cache.find_credential(item_id)
+    if not entry:
+        if command == "load":
+            return ui.emit({"replace": {"ids": {"card": ui.label("This item is not in the local cache any more. Sync your vault and try again.")}}})
+        return ui.emit(ui.status("Item not found. Sync your vault and try again.", error=True))
+
+    if command == "load":
+        return ui.emit(build(entry))
+
+    try:
+        if command == "copy-password":
+            seconds = system.copy(dcli.read(item_id, "password"))
+            return ui.emit(ui.status(f"Password copied · {system.clears_in(seconds) or 'clipboard is not cleared'}"))
+        if command == "copy-login":
+            system.copy(entry["login"], secret=False)
+            return ui.emit(ui.status("Login copied"))
+        if command == "copy-otp":
+            code, remaining = dcli.read_otp(item_id, entry["otp"])
+            system.copy(code)
+            return ui.emit(ui.status(f"2FA code copied · valid for {remaining} s"))
+        if command == "reveal":
+            if extra == "1":
+                text, symbol, revealed = ui.MASK, "eye", "0"
+            else:
+                text, symbol, revealed = dcli.read(item_id, "password"), "eye.slash", "1"
+            return ui.emit(
+                {
+                    "variables": {"revealed": revealed},
+                    "update": {
+                        "ids": {
+                            "password": {"text": text, "selectable": revealed == "1"},
+                            "reveal": {"image": {"type": "symbol", "src": symbol, "size": {"width": 15}}},
+                        }
+                    },
+                }
+            )
+    except Exception as error:
+        return ui.emit(ui.status(ui.error_text(error), error=True))
+    return ui.emit({})
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:] + ["", "", ""]
+    main(args[0], args[1], args[2])
