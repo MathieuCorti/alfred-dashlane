@@ -40,6 +40,8 @@ TRIGGER_CARD = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C14"
 TRIGGER_NOTE = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C15"
 SF_FIELDS = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C16"
 ROUTE_FIELDS = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C17"
+CLEAR_ARG = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C18"
+TRIGGER_FIELDS = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C19"
 
 MODIFIERS = {"none": 0, "cmd": 1 << 20, "alt": 1 << 19, "ctrl": 1 << 18, "shift": 1 << 17, "fn": 1 << 23}
 
@@ -247,9 +249,18 @@ def build_info_plist():
         script_filter(SF_SEARCH, "keyword", "search.py", "Search Dashlane", "Copy passwords, logins and 2FA codes"),
         script_filter(SF_NOTES, "notes_keyword", "notes.py", "Search Dashlane notes", "Show or copy secure notes"),
         conditional(ROUTE, "action", route_targets),
+        {
+            # A Script Filter reached mid-stream shows its input as the query:
+            # keep the item id in a variable and start the field list empty.
+            "uid": CLEAR_ARG,
+            "type": "alfred.workflow.utility.argument",
+            "version": 1,
+            "config": {"argument": "", "passthroughargument": False, "variables": {"item_id": "{query}"}},
+        },
         fields_filter(SF_FIELDS),
         external_trigger(TRIGGER_CARD, "card"),
         external_trigger(TRIGGER_NOTE, "note"),
+        external_trigger(TRIGGER_FIELDS, "fields"),
         alfred_ui(UI_ITEM, "item.alfredui"),
         alfred_ui(UI_NOTE, "note.alfredui"),
         {
@@ -289,11 +300,13 @@ def build_info_plist():
         SF_SEARCH: [connection(ROUTE, mask) for mask in MODIFIERS.values()],
         SF_NOTES: [connection(ROUTE, MODIFIERS[key]) for key in ("none", "cmd")],
         ROUTE: [
-            connection(SF_FIELDS, source_output=ROUTE_FIELDS),
+            connection(CLEAR_ARG, source_output=ROUTE_FIELDS),
             connection(UI_ITEM, source_output=ROUTE_CARD),
             connection(UI_NOTE, source_output=ROUTE_NOTE_CARD),
             connection(ACTION),
         ],
+        TRIGGER_FIELDS: [connection(CLEAR_ARG)],
+        CLEAR_ARG: [connection(SF_FIELDS)],
         SF_FIELDS: [connection(ROUTE, MODIFIERS[key]) for key in ("none", "cmd", "alt")],
         TRIGGER_CARD: [connection(UI_ITEM)],
         TRIGGER_NOTE: [connection(UI_NOTE)],
@@ -309,7 +322,9 @@ def build_info_plist():
         SF_SEARCH: (40, 60),
         SF_NOTES: (40, 260),
         ROUTE: (260, 160),
-        SF_FIELDS: (430, -110),
+        TRIGGER_FIELDS: (260, -110),
+        CLEAR_ARG: (430, -90),
+        SF_FIELDS: (560, -110),
         TRIGGER_CARD: (260, 0),
         TRIGGER_NOTE: (260, 300),
         UI_ITEM: (430, 30),
@@ -368,6 +383,12 @@ def install():
     subprocess.run(
         ["rsync", "-a", "--delete", "--exclude", "prefs.plist", f"{BUILD_DIR}/", f"{target}/"],
         check=True,
+    )
+    # Make Alfred pick up the new info.plist right away.
+    subprocess.run(
+        ["osascript", "-e", f'tell application id "com.runningwithcrayons.Alfred" to reload workflow "{BUNDLE_ID}"'],
+        check=False,
+        capture_output=True,
     )
     return target
 

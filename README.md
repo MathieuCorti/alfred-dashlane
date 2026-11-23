@@ -51,7 +51,7 @@ Open a card from AppleScript or another workflow with an item id:
 tell application id "com.runningwithcrayons.Alfred" to run trigger "card" in workflow "com.mathieucorti.alfred.dashlane" with argument "ITEM-ID"
 ```
 
-The `note` trigger does the same for a secure note.
+The `fields` trigger opens the item's field list, and `note` opens a secure note.
 
 ## Security
 
