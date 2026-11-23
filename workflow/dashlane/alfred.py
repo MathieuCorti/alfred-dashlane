@@ -3,7 +3,7 @@
 import json
 import sys
 
-from . import cache, config, dcli
+from . import cache, config, dcli, favicons
 
 
 def output(items, rerun=None, variables=None):
@@ -130,6 +130,8 @@ def prepare(name):
     state = cache.load(cache.STATE) or {}
     if cache.should_refresh(name):
         cache.spawn_refresh()
+    elif entries is not None:
+        favicons.maybe_spawn_fetch()
     return entries, state, cache.refresh_running()
 
 

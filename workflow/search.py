@@ -2,7 +2,7 @@
 
 import sys
 
-from dashlane import alfred, cache, config
+from dashlane import alfred, cache, config, favicons
 
 MAX_RESULTS = 60
 
@@ -30,7 +30,7 @@ def credential_item(entry):
         "subtitle": subtitle,
         "arg": entry["id"],
         "autocomplete": entry["title"],
-        "icon": {"path": config.icon("credential-otp" if has_otp else "credential")},
+        "icon": {"path": favicons.icon_path(entry["domain"]) or config.icon("credential-otp" if has_otp else "credential")},
         "text": {"copy": login, "largetype": login or entry["title"]},
         "variables": {"action": "fields"},
         "mods": {

@@ -12,7 +12,7 @@ import tempfile
 import time
 from urllib.parse import urlparse
 
-from . import config, dcli
+from . import config, dcli, favicons
 
 CREDENTIALS = "credentials.json"
 NOTES = "notes.json"
@@ -169,9 +169,9 @@ def _metas(items, build):
 # --- Refresh lock --------------------------------------------------------
 
 
-def _lock_owner():
+def _lock_owner(name):
     try:
-        return int(_path(REFRESH_LOCK).read_text().strip() or 0)
+        return int(_path(name).read_text().strip() or 0)
     except (OSError, ValueError):
         return 0
 
@@ -188,22 +188,22 @@ def _pid_alive(pid):
     return True
 
 
-def _lock_is_stale():
-    lock_age = age(REFRESH_LOCK)
+def _lock_is_stale(name):
+    lock_age = age(name)
     if lock_age is None:
         return False
-    return lock_age > LOCK_TTL or (lock_age > 2 and not _pid_alive(_lock_owner()))
+    return lock_age > LOCK_TTL or (lock_age > 2 and not _pid_alive(_lock_owner(name)))
 
 
-def acquire_lock(wait=0.0):
-    """Atomically take the refresh lock. Returns False if it stays busy for `wait` seconds."""
+def acquire_lock(wait=0.0, name=REFRESH_LOCK):
+    """Atomically take a lock file. Returns False if it stays busy for `wait` seconds."""
     deadline = time.time() + wait
     while True:
         try:
-            fd = os.open(str(_path(REFRESH_LOCK)), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            fd = os.open(str(_path(name)), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         except FileExistsError:
-            if _lock_is_stale():
-                _unlink(REFRESH_LOCK)
+            if _lock_is_stale(name):
+                _unlink(name)
                 continue
             if time.time() >= deadline:
                 return False
@@ -214,13 +214,17 @@ def acquire_lock(wait=0.0):
         return True
 
 
-def release_lock():
-    if _lock_owner() == os.getpid():
-        _unlink(REFRESH_LOCK)
+def release_lock(name=REFRESH_LOCK):
+    if _lock_owner(name) == os.getpid():
+        _unlink(name)
+
+
+def lock_held(name=REFRESH_LOCK):
+    return age(name) is not None and not _lock_is_stale(name)
 
 
 def refresh_running():
-    return age(REFRESH_LOCK) is not None and not _lock_is_stale()
+    return lock_held(REFRESH_LOCK)
 
 
 # --- Refresh ---------------------------------------------------------------
@@ -255,6 +259,7 @@ def refresh(sync_first=False, wait=0.0):
         save(CREDENTIALS, credentials)
         save(NOTES, notes)
         save(STATE, {"error": None, "at": time.time(), "count": len(credentials), "version": CACHE_VERSION})
+        favicons.spawn_fetch()
         return credentials, notes
     finally:
         release_lock()

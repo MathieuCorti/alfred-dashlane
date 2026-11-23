@@ -54,6 +54,7 @@ FILES = [
     "fields.py",
     "action.py",
     "refresh.py",
+    "fetch_favicons.py",
     "pasteboard.js",
     "autotype.js",
     "icon.png",
@@ -224,6 +225,13 @@ def user_configuration():
                     ["Every 4 hours", "240"],
                 ],
             },
+        },
+        {
+            "type": "checkbox",
+            "variable": "favicons",
+            "label": "Website icons",
+            "description": "Download each site's icon to show it in the results. Requests go straight to each site, never to a third-party icon service.",
+            "config": {"default": True, "required": False, "text": "Show website icons"},
         },
         {
             "type": "checkbox",

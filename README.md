@@ -18,7 +18,7 @@ Search your Dashlane vault from [Alfred](https://www.alfredapp.com), powered by 
 * fn↩ Open the website
 * ⌘C Copy the login · ⌘L Large Type · ⇧ or ⌘Y Quick Look the website
 
-With no query, favourites come first, then recently used items. Type `sync` or `lock` after the keyword to sync or lock the vault.
+Results show each website's icon, as in Dashlane. With no query, favourites come first, then recently used items. Type `sync` or `lock` after the keyword to sync or lock the vault.
 
 ### Item fields
 
@@ -61,6 +61,7 @@ The `fields` trigger opens the item's field list, and `note` opens a secure note
 * Copied secrets stay on this Mac (no Universal Clipboard) and are marked as concealed, so clipboard managers, Alfred's Clipboard History included, don't record them. They are cleared from the clipboard after the configured delay, unless you copied something else meanwhile.
 * Pasting (⌘↩ in the item fields) puts your previous clipboard back right after the paste.
 * Only http and https websites are opened.
+* Website icons are downloaded straight from each site, like a browser visiting it, never from a third-party icon service that would learn which sites you have accounts on. Turn them off in the workflow configuration.
 * Logging in and unlocking happen in Terminal: your master password never goes through Alfred.
 
 Typing and pasting need Alfred to have Accessibility access (System Settings › Privacy & Security › Accessibility).
@@ -78,6 +79,7 @@ swift tools/make_icons.swift workflow  # re-render the icons from SF Symbols
 * `search.py`, `fields.py` and `notes.py` are the Script Filters. They read a metadata cache that `refresh.py` rebuilds in the background.
 * `action.py` runs the chosen action and tells the workflow to post a notification or open Terminal.
 * `item.alfredui` and `note.alfredui` are the Alfred UI cards. Their scripts build the card when it opens; `scripts/otp` is the pulse that keeps the 2FA code up to date.
+* `fetch_favicons.py` downloads missing website icons in the background (`dashlane/favicons.py`).
 * `pasteboard.js` and `autotype.js` handle the clipboard and typing. Secrets reach them through stdin, never through command-line arguments.
 
 ## License

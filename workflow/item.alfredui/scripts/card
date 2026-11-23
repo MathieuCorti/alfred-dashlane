@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from dashlane import cache, dcli, items, system, ui  # noqa: E402
+from dashlane import cache, dcli, favicons, items, system, ui  # noqa: E402
 
 RETURN = "↩︎"
 
@@ -86,7 +86,7 @@ def build(entry):
                 "systemTealColor",
                 entry["title"],
                 entry["domain"],
-                image={"type": "file", "src": "../icon.png", "size": {"width": 36}},
+                image={"type": "file", "src": favicons.icon_path(entry["domain"]) or "../icon.png", "size": {"width": 36}},
             ),
             ui.separator(),
             {"type": "view", "layout": "form", "spacing": 10, "components": rows},

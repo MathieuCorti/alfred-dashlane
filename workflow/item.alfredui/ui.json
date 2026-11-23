@@ -3,7 +3,8 @@
   "variablesconfig": {
     "item_id": { "src": "args[0]", "scriptenv": true },
     "clear_clipboard_after": { "src": "variable", "scriptenv": true },
-    "dcli_path": { "src": "variable", "scriptenv": true }
+    "dcli_path": { "src": "variable", "scriptenv": true },
+    "favicons": { "src": "variable", "scriptenv": true }
   },
   "variables": {
     "revealed": "0",
