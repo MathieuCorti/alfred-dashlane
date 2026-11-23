@@ -96,6 +96,7 @@ def credential_meta(item):
         "url": url,
         "domain": domain,
         "otp": otp_field,
+        "has_note": bool((item.get("note") or "").strip()),
         "favorite": item.get("isFavorite") == "true",
         "last_use": _int(item.get("lastUse")),
         "uses": _int(item.get("numberUse")),

@@ -17,7 +17,12 @@ def credential_item(entry):
     subtitle = " · ".join(details) or "No login or website"
 
     def mod(subtitle, action, valid=True):
-        return {"subtitle": subtitle, "arg": entry["id"], "valid": valid, "variables": {"action": action}}
+        return {
+            "subtitle": subtitle,
+            "arg": entry["id"],
+            "valid": valid,
+            "variables": {"action": action, "item_id": entry["id"]},
+        }
 
     item = {
         "uid": entry["id"],
@@ -27,11 +32,11 @@ def credential_item(entry):
         "autocomplete": entry["title"],
         "icon": {"path": config.icon("credential-otp" if has_otp else "credential")},
         "text": {"copy": login, "largetype": login or entry["title"]},
-        "variables": {"action": "copy-password"},
+        "variables": {"action": "fields", "item_id": entry["id"]},
         "mods": {
-            "cmd": mod(f"Copy login: {login}" if login else "This item has no login", "copy-login", bool(login)),
+            "cmd": mod("Copy the password", "copy:password"),
             "alt": mod("Show item card", "card"),
-            "ctrl": mod("Copy 2FA code" if has_otp else "This item has no 2FA code", "copy-otp", has_otp),
+            "ctrl": mod("Copy 2FA code" if has_otp else "This item has no 2FA code", "copy:otp", has_otp),
             "shift": mod("Type login ⇥ password into the frontmost app", "type"),
             "fn": mod(f"Open {url}" if url else "This item has no website", "open-url", bool(url)),
         },

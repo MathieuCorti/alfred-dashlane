@@ -8,7 +8,10 @@ from . import config
 OSASCRIPT = ["/usr/bin/osascript", "-l", "JavaScript"]
 
 
-def copy(text, secret=True):
+PASTE_CLEAR_AFTER = 2
+
+
+def copy(text, secret=True, clear_after=None):
     """Copy text to the clipboard.
 
     Secrets are marked concealed/transient so clipboard managers skip them, and
@@ -23,7 +26,8 @@ def copy(text, secret=True):
         encoding="utf-8",
         check=True,
     )
-    clear_after = config.clear_clipboard_after() if secret else 0
+    if clear_after is None:
+        clear_after = config.clear_clipboard_after() if secret else 0
     if clear_after:
         subprocess.Popen(
             [
@@ -39,6 +43,21 @@ def copy(text, secret=True):
             start_new_session=True,
         )
     return clear_after
+
+
+def paste(text, secret=True):
+    """Paste text into the frontmost app. A pasted secret leaves the clipboard right after."""
+    clear_after = PASTE_CLEAR_AFTER if secret and config.clear_clipboard_after() else 0
+    copy(text, secret=secret, clear_after=clear_after)
+    subprocess.run(
+        [
+            "/usr/bin/osascript",
+            "-e", "delay 0.3",
+            "-e", 'tell application "System Events" to keystroke "v" using command down',
+        ],
+        capture_output=True,
+        check=True,
+    )
 
 
 def autotype(login, password):

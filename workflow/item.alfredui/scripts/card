@@ -40,13 +40,25 @@ def build(entry):
             "2FA code",
             ui.inline(
                 [
-                    ui.label("··· ···", id="otp_code", font={"size": "large", "monospaced": "digits", "weight": "medium"}),
+                    ui.label(
+                        "··· ···",
+                        id="otp_code",
+                        font={"size": 17, "monospaced": "digits", "weight": "semibold"},
+                        constraints={"size": {"width": 84}, "position": "left"},
+                    ),
                     {"id": "otp_progress", "type": "progress", "style": "round", "progress": 0, "constraints": {"size": 16, "position": "centre"}},
-                    ui.label("", id="otp_seconds", colour=ui.SECONDARY, font={"monospaced": "digits"}, constraints={"position": "centre"}),
+                    ui.label(
+                        "",
+                        id="otp_seconds",
+                        colour=ui.SECONDARY,
+                        font={"monospaced": "digits"},
+                        constraints={"size": {"width": 40}, "position": "left"},
+                    ),
                 ],
                 spacing=8,
             ),
             [ui.icon_button("doc.on.doc", "Copy 2FA code (⌃↩)", ui.script_action("card", "copy-otp", "{var:item_id}"), shortcut="⌃" + RETURN)],
+            stretch=False,
         )
     rows += ui.field_row(
         "Website",

@@ -38,12 +38,15 @@ NEXT_NOTIFY = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C12"
 NEXT_TERMINAL = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C13"
 TRIGGER_CARD = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C14"
 TRIGGER_NOTE = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C15"
+SF_FIELDS = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C16"
+ROUTE_FIELDS = "4C1E0B6A-2A5E-4E43-9C0B-1D5E0A7B5C17"
 
 MODIFIERS = {"none": 0, "cmd": 1 << 20, "alt": 1 << 19, "ctrl": 1 << 18, "shift": 1 << 17, "fn": 1 << 23}
 
 FILES = [
     "search.py",
     "notes.py",
+    "fields.py",
     "action.py",
     "refresh.py",
     "pasteboard.js",
@@ -95,6 +98,36 @@ def script_filter(uid, keyword_var, script, title, subtext):
             "title": title,
             "type": 0,
             "withspace": True,
+        },
+    }
+
+
+def fields_filter(uid):
+    """Keyword-less Script Filter listing one credential's fields (reached from ROUTE)."""
+    return {
+        "uid": uid,
+        "type": "alfred.workflow.input.scriptfilter",
+        "version": 3,
+        "config": {
+            "alfredfiltersresults": True,
+            "alfredfiltersresultsmatchmode": 0,
+            "argumenttreatemptyqueryasnil": True,
+            "argumenttrimmode": 0,
+            "argumenttype": 1,
+            "escaping": 102,
+            "queuedelaycustom": 3,
+            "queuedelayimmediatelyinitially": True,
+            "queuedelaymode": 0,
+            "queuemode": 1,
+            "runningsubtext": "Loading item…",
+            "script": '/usr/bin/python3 fields.py "$1"',
+            "scriptargtype": 1,
+            "scriptfile": "",
+            "skipuniversalaction": True,
+            "subtext": "Copy or paste a field of the item",
+            "title": "Dashlane item",
+            "type": 0,
+            "withspace": False,
         },
     }
 
@@ -206,6 +239,7 @@ def user_configuration():
 
 def build_info_plist():
     route_targets = [
+        (ROUTE_FIELDS, "fields", "Item fields"),
         (ROUTE_CARD, "card", "Credential card"),
         (ROUTE_NOTE_CARD, "note-card", "Note card"),
     ]
@@ -213,6 +247,7 @@ def build_info_plist():
         script_filter(SF_SEARCH, "keyword", "search.py", "Search Dashlane", "Copy passwords, logins and 2FA codes"),
         script_filter(SF_NOTES, "notes_keyword", "notes.py", "Search Dashlane notes", "Show or copy secure notes"),
         conditional(ROUTE, "action", route_targets),
+        fields_filter(SF_FIELDS),
         external_trigger(TRIGGER_CARD, "card"),
         external_trigger(TRIGGER_NOTE, "note"),
         alfred_ui(UI_ITEM, "item.alfredui"),
@@ -254,10 +289,12 @@ def build_info_plist():
         SF_SEARCH: [connection(ROUTE, mask) for mask in MODIFIERS.values()],
         SF_NOTES: [connection(ROUTE, MODIFIERS[key]) for key in ("none", "cmd")],
         ROUTE: [
+            connection(SF_FIELDS, source_output=ROUTE_FIELDS),
             connection(UI_ITEM, source_output=ROUTE_CARD),
             connection(UI_NOTE, source_output=ROUTE_NOTE_CARD),
             connection(ACTION),
         ],
+        SF_FIELDS: [connection(ROUTE, MODIFIERS[key]) for key in ("none", "cmd", "alt")],
         TRIGGER_CARD: [connection(UI_ITEM)],
         TRIGGER_NOTE: [connection(UI_NOTE)],
         UI_ITEM: [connection(ACTION)],
@@ -272,6 +309,7 @@ def build_info_plist():
         SF_SEARCH: (40, 60),
         SF_NOTES: (40, 260),
         ROUTE: (260, 160),
+        SF_FIELDS: (430, -110),
         TRIGGER_CARD: (260, 0),
         TRIGGER_NOTE: (260, 300),
         UI_ITEM: (430, 30),

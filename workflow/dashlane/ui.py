@@ -72,8 +72,11 @@ def inline(components, direction="horizontal", spacing=4, **extra):
     return view
 
 
-def field_row(name, value, buttons):
+def field_row(name, value, buttons, stretch=True):
     """Two components for a form layout: the field name and value + buttons."""
+    value_constraints = {"region": "centre", "position": "left"}
+    if stretch:
+        value_constraints["stretch"] = "horizontal"
     return [
         label(name, colour=SECONDARY, constraints={"position": "right"}),
         {
@@ -81,7 +84,7 @@ def field_row(name, value, buttons):
             "layout": "border",
             "spacing": 8,
             "components": [
-                {**value, "constraints": {"region": "centre", "position": "left", "stretch": "horizontal"}},
+                {**value, "constraints": value_constraints},
                 {**inline(buttons, spacing=2), "constraints": {"region": "right"}},
             ],
         },

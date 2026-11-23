@@ -66,6 +66,10 @@ let resultIcons: [(String, String, UInt32)] = [
     ("login", "person.badge.key.fill", 0x2F7FE0),
     ("warning", "exclamationmark.triangle.fill", 0xE8780C),
     ("search", "magnifyingglass", 0x8E8E93),
+    ("field-login", "person.fill", 0x2F7FE0),
+    ("field-url", "globe", 0x2F7FE0),
+    ("field-type", "keyboard.fill", 0x8E8E93),
+    ("field-card", "rectangle.stack.fill", 0x14A38B),
 ]
 
 for (file, name, color) in resultIcons {

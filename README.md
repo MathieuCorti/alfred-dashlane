@@ -10,8 +10,8 @@ Search your Dashlane vault from [Alfred](https://www.alfredapp.com), powered by 
 
 ## Passwords: `dash`
 
-* ↩ Copy the password
-* ⌘↩ Copy the login
+* ↩ Open the item's fields
+* ⌘↩ Copy the password
 * ⌥↩ Show the item card
 * ⌃↩ Copy the 2FA code
 * ⇧↩ Type login ⇥ password into the frontmost app
@@ -19,6 +19,14 @@ Search your Dashlane vault from [Alfred](https://www.alfredapp.com), powered by 
 * ⌘C Copy the login · ⌘L Large Type · ⇧ or ⌘Y Quick Look the website
 
 With no query, favourites come first, then recently used items. Type `sync` or `lock` after the keyword to sync or lock the vault.
+
+### Item fields
+
+↩ on a result lists its login, password, 2FA code, website, username and note, plus "Type login ⇥ password" and "Show item card". Type to filter them; Alfred learns the ones you use most.
+
+* ↩ Copy the field
+* ⌘↩ Paste it into the frontmost app
+* ⌥↩ Open the website (website field)
 
 ### Item card
 
@@ -48,7 +56,7 @@ The `note` trigger does the same for a secure note.
 ## Security
 
 * Passwords, 2FA codes and notes are read from the Dashlane CLI only when you use them. The workflow caches titles, logins and websites only, in a file only your user can read.
-* Copied secrets are marked as concealed so clipboard managers, Alfred's Clipboard History included, don't record them. They are cleared from the clipboard after the configured delay, unless you copied something else meanwhile.
+* Copied secrets are marked as concealed so clipboard managers, Alfred's Clipboard History included, don't record them. They are cleared from the clipboard after the configured delay, unless you copied something else meanwhile. A pasted secret leaves the clipboard 2 seconds after the paste.
 * Logging in and unlocking happen in Terminal: your master password never goes through Alfred.
 
 ## Development
@@ -61,7 +69,7 @@ python3 build_workflow.py --install  # also copy the build into Alfred's workflo
 swift tools/make_icons.swift workflow  # re-render the icons from SF Symbols
 ```
 
-* `search.py` and `notes.py` are the Script Filters. They read a metadata cache that `refresh.py` rebuilds in the background.
+* `search.py`, `fields.py` and `notes.py` are the Script Filters. They read a metadata cache that `refresh.py` rebuilds in the background.
 * `action.py` runs the chosen action and tells the workflow to post a notification or open Terminal.
 * `item.alfredui` and `note.alfredui` are the Alfred UI cards. Their scripts build the card when it opens; `scripts/otp` is the pulse that keeps the 2FA code up to date.
 * `pasteboard.js` and `autotype.js` handle the clipboard and typing. Secrets reach them through stdin, never through command-line arguments.

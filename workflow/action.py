@@ -1,9 +1,10 @@
 """Run Script: perform the action chosen in Alfred or in an item card.
 
 Input: the item id (or an error kind for "login") as argv[1], and the action
-in the `action` variable. Output: Alfred JSON whose `next` variable tells the
-workflow what to do afterwards ("notify" or "terminal") and whose arg is the
-notification text or the terminal command.
+in the `action` variable. Field actions are "copy:<field>" or "paste:<field>".
+Output: Alfred JSON whose `next` variable tells the workflow what to do
+afterwards ("notify" or "terminal") and whose arg is the notification text or
+the terminal command.
 """
 
 import json
@@ -11,6 +12,15 @@ import os
 import sys
 
 from dashlane import cache, dcli, system
+
+FIELD_NAMES = {
+    "login": "Login",
+    "username": "Username",
+    "password": "Password",
+    "otp": "2FA code",
+    "url": "Website",
+    "note": "Note",
+}
 
 
 def done(text="", title="Dashlane", next_step="notify"):
@@ -33,29 +43,43 @@ def credential(item_id):
     return entry
 
 
-def copied(what, entry_title, seconds):
-    suffix = system.clears_in(seconds)
-    return done(f"{entry_title}{' · ' + suffix if suffix else ''}", f"{what} copied")
+def field_value(entry, field):
+    """Return (value, is_secret, extra notification text) for a credential field."""
+    if field == "login":
+        return entry["login"], False, ""
+    if field == "username":
+        return entry.get("secondary_login", ""), False, ""
+    if field == "url":
+        return entry["url"], False, ""
+    if field == "password":
+        return dcli.read(entry["id"], "password"), True, ""
+    if field == "note":
+        return dcli.read(entry["id"], "note"), True, ""
+    if field == "otp":
+        if not entry["otp"]:
+            raise dcli.DcliError(dcli.FAILED, "This item has no 2FA code.")
+        code, remaining = dcli.read_otp(entry["id"], entry["otp"])
+        return code, True, f"valid for {remaining} s"
+    raise dcli.DcliError(dcli.FAILED, f"Unknown field: {field}")
+
+
+def field_action(mode, field, item_id):
+    entry = credential(item_id)
+    value, secret, extra = field_value(entry, field)
+    if not value:
+        return done(entry["title"], f"No {FIELD_NAMES[field].lower()} for this item")
+    if mode == "paste":
+        system.paste(value, secret=secret)
+        return done()
+    seconds = system.copy(value, secret=secret)
+    details = [entry["title"], extra, system.clears_in(seconds) if secret else ""]
+    return done(" · ".join(part for part in details if part), f"{FIELD_NAMES[field]} copied")
 
 
 def main(action, arg):
-    if action == "copy-password":
-        entry = credential(arg)
-        seconds = system.copy(dcli.read(arg, "password"))
-        return copied("Password", entry["title"], seconds)
-
-    if action == "copy-login":
-        entry = credential(arg)
-        system.copy(entry["login"], secret=False)
-        return done(entry["title"], f"Login copied: {entry['login']}")
-
-    if action == "copy-otp":
-        entry = credential(arg)
-        if not entry["otp"]:
-            return done(entry["title"], "This item has no 2FA code")
-        code, remaining = dcli.read_otp(arg, entry["otp"])
-        system.copy(code)
-        return done(f"{entry['title']} · valid for {remaining} s", "2FA code copied")
+    mode, _, field = action.partition(":")
+    if mode in ("copy", "paste") and field in FIELD_NAMES:
+        return field_action(mode, field, arg)
 
     if action == "type":
         entry = credential(arg)
@@ -68,10 +92,15 @@ def main(action, arg):
             system.open_url(url)
         return done()
 
-    if action == "copy-note":
+    if action in ("copy-note", "paste-note"):
         entry = cache.find_note(arg) or {"title": "Note"}
-        seconds = system.copy(dcli.read(arg, "content"))
-        return copied("Note", entry["title"], seconds)
+        content = dcli.read(arg, "content")
+        if action == "paste-note":
+            system.paste(content)
+            return done()
+        seconds = system.copy(content)
+        suffix = system.clears_in(seconds)
+        return done(f"{entry['title']}{' · ' + suffix if suffix else ''}", "Note copied")
 
     if action == "sync":
         dcli.sync()
