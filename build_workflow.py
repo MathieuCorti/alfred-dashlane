@@ -67,9 +67,15 @@ EXECUTABLES = ["item.alfredui/scripts/card", "item.alfredui/scripts/otp", "note.
 
 
 def workflow_readme():
-    """The README shown in Alfred: the repository README without the Development part."""
+    """The README shown in Alfred: the README.md part between the workflow-readme markers.
+
+    It follows the Alfred Gallery Style Guide (https://alfred.app/submit/styleguide/).
+    """
     text = (ROOT / "README.md").read_text()
-    return text.split("\n## Development")[0].strip() + "\n"
+    start, end = "<!-- workflow-readme -->", "<!-- /workflow-readme -->"
+    if start not in text or end not in text:
+        raise SystemExit("README.md is missing the workflow-readme markers")
+    return text.split(start, 1)[1].split(end, 1)[0].strip() + "\n"
 
 
 def connection(destination, modifiers=0, source_output=None):
@@ -377,7 +383,9 @@ def copy_sources():
         shutil.rmtree(BUILD_DIR)
     BUILD_DIR.mkdir(parents=True)
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
-    for name in FILES:
+    # Screenshots referenced by the readme (images/NAME.png), when there are some.
+    optional = [name for name in ("images",) if (SRC / name).exists()]
+    for name in FILES + optional:
         source = SRC / name
         if source.is_dir():
             shutil.copytree(source, BUILD_DIR / name, ignore=ignore)
