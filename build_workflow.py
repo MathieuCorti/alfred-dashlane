@@ -18,7 +18,7 @@ SRC = ROOT / "workflow"
 BUILD_DIR = ROOT / "build" / "Dashlane"
 DIST_DIR = ROOT / "dist"
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 BUNDLE_ID = "com.motystudio.dashlane"
 INSTALL_FOLDER = "user.workflow.dashlane-motystudio"
 # Folders of earlier dev installs: their prefs.plist (user configuration) is
@@ -56,7 +56,6 @@ FILES = [
     "refresh.py",
     "fetch_favicons.py",
     "pasteboard.js",
-    "autotype.js",
     "icon.png",
     "dashlane",
     "icons",

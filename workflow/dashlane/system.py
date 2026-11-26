@@ -1,9 +1,9 @@
 """Clipboard, paste, auto-type and URL opening."""
 
-import json
 import subprocess
+import time
 
-from . import config
+from . import config, keyboard
 
 OSASCRIPT = ["/usr/bin/osascript", "-l", "JavaScript"]
 PASTEBOARD = str(config.WORKFLOW_DIR / "pasteboard.js")
@@ -61,10 +61,20 @@ def paste(text, secret=True):
 
 
 def autotype(login, password):
-    _run_jxa(
-        [str(config.WORKFLOW_DIR / "autotype.js")],
-        json.dumps({"login": login, "password": password, "submit": config.autotype_submit()}),
-    )
+    """Type the login, Tab, then the password (and Return if configured)."""
+    if not keyboard.can_post():
+        raise PermissionMissing(ACCESSIBILITY_HELP)
+    # Start once the ⇧ of ⇧↩ is released and focus is back in the previous app.
+    keyboard.wait_for_modifiers_release()
+    time.sleep(0.3)
+    with keyboard.Keyboard() as keys:
+        if login:
+            keys.type_text(login)
+            keys.press(keyboard.TAB)
+            time.sleep(0.15)
+        keys.type_text(password)
+        if config.autotype_submit():
+            keys.press(keyboard.RETURN)
 
 
 def open_url(url):

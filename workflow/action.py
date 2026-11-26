@@ -11,7 +11,7 @@ import json
 import os
 import sys
 
-from dashlane import cache, dcli, items, system
+from dashlane import cache, dcli, items, system, usage
 
 
 def done(text="", title="Dashlane", next_step="notify"):
@@ -46,7 +46,12 @@ def field_action(mode, field, item_id):
     return done(" · ".join(part for part in details if part), f"{name} copied")
 
 
+ITEM_ACTIONS = ("copy:", "paste:", "type", "open-url", "copy-note")
+
+
 def main(action, arg):
+    if action.startswith(ITEM_ACTIONS) and "://" not in arg:
+        usage.record(arg)
     mode, _, field = action.partition(":")
     if mode in ("copy", "paste") and field in items.FIELD_NAMES:
         return field_action(mode, field, arg)

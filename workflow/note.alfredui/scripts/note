@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from dashlane import cache, dcli, system, ui  # noqa: E402
+from dashlane import cache, dcli, system, ui, usage  # noqa: E402
 
 RETURN = "↩︎"
 HIDDEN = "This note is secured in Dashlane. Press ⌘R to show it."
@@ -87,6 +87,7 @@ def main(command, item_id):
             return ui.emit({"replace": {"ids": {"card": ui.label(message)}}})
         return ui.emit(ui.status(message, error=True))
     if command == "load":
+        usage.record(item_id)
         return ui.emit(build(entry))
     if command == "show":
         content, error = read_content(entry)

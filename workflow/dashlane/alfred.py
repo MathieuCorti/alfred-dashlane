@@ -3,11 +3,13 @@
 import json
 import sys
 
-from . import cache, config, dcli, favicons
+from . import cache, config, dcli, favicons, usage
 
 
 def output(items, rerun=None, variables=None):
-    payload = {"items": items}
+    # The workflow orders results itself (usage.py); Alfred's own learning
+    # would reshuffle them on top of that.
+    payload = {"items": items, "skipknowledge": True}
     if rerun:
         payload["rerun"] = rerun
     if variables:
@@ -92,10 +94,15 @@ def utility_items(query):
 
 
 def rank(entries, query, fields):
-    """Keep entries whose fields contain every query word, best matches first."""
+    """Keep entries whose fields contain every query word, best matches first.
+
+    Matches are grouped by how well they match; within a group, favourites come
+    first, then the items you use most and most recently (see usage.py).
+    """
+    score = usage.scorer()
     words = query.lower().split()
     if not words:
-        return sorted(entries, key=lambda e: (not e.get("favorite"), -e.get("last_use", 0), e["title"].lower()))
+        return sorted(entries, key=lambda e: (not e.get("favorite"), -score(e), e["title"].lower()))
     phrase = " ".join(words)
     ranked = []
     for entry in entries:
@@ -103,17 +110,15 @@ def rank(entries, query, fields):
         if not all(any(word in h for h in haystacks) for word in words):
             continue
         title = haystacks[0]
-        if title == phrase:
-            score = 0
-        elif title.startswith(phrase):
-            score = 1
-        elif any(h.startswith(phrase) for h in haystacks[1:]):
-            score = 2
-        elif all(any(part.startswith(word) for part in title.replace(".", " ").split()) for word in words):
-            score = 3
+        if title.startswith(phrase):
+            group = 0
+        elif any(h.startswith(phrase) for h in haystacks[1:]) or all(
+            any(part.startswith(word) for part in title.replace(".", " ").split()) for word in words
+        ):
+            group = 1
         else:
-            score = 4
-        ranked.append((score, not entry.get("favorite"), -entry.get("last_use", 0), entry["title"].lower(), entry))
+            group = 2
+        ranked.append((group, not entry.get("favorite"), -score(entry), entry["title"].lower(), entry))
     ranked.sort(key=lambda r: r[:4])
     return [r[-1] for r in ranked]
 

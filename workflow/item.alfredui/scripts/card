@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from dashlane import cache, dcli, favicons, items, system, ui  # noqa: E402
+from dashlane import cache, dcli, favicons, items, system, ui, usage  # noqa: E402
 
 RETURN = "↩︎"
 
@@ -117,6 +117,7 @@ def main(command, item_id, extra=""):
         return ui.emit(ui.status("Item not found. Sync your vault and try again.", error=True))
 
     if command == "load":
+        usage.record(item_id)
         return ui.emit(build(entry))
 
     copy_fields = {"copy-password": "password", "copy-login": "login", "copy-otp": "otp"}

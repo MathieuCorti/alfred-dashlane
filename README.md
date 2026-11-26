@@ -26,7 +26,7 @@ Search your Dashlane logins via the `dash` keyword.
 * <kbd>fn</kbd><kbd>↩</kbd> Open the website.
 * <kbd>⌘</kbd><kbd>Y</kbd> Quick Look the website.
 
-With no query, favourites come first, then recently used items. Search for `sync` or `lock` with the same keyword to sync or lock the vault.
+Results you use often and recently come first, favourites ahead. Search for `sync` or `lock` with the same keyword to sync or lock the vault.
 
 Copy or paste a single field of an item from its field list: login, password, 2FA code, website, username and note.
 
@@ -42,6 +42,8 @@ The item card shows the login, website and a live 2FA code with its countdown.
 * <kbd>⌃</kbd><kbd>↩</kbd> Copy the 2FA code.
 * <kbd>⇧</kbd><kbd>↩</kbd> Type login and password into the frontmost app.
 * <kbd>⌘</kbd><kbd>O</kbd> Open the website.
+
+Typing works when the login and password fields are on the same page, as Tab moves from one to the other; on sign-in pages that ask for the password on a second page, paste each field from the field list instead.
 
 Read secure notes via the `dashnote` keyword.
 
@@ -89,7 +91,8 @@ The text between the `workflow-readme` markers in this README becomes the readme
 * `action.py` runs the chosen action and tells the workflow to post a notification or open Terminal.
 * `item.alfredui` and `note.alfredui` are the Alfred UI cards. Their scripts build the card when it opens; `scripts/otp` is the pulse that keeps the 2FA code up to date.
 * `fetch_favicons.py` downloads missing website icons in the background (`dashlane/favicons.py`).
-* `pasteboard.js` and `autotype.js` handle the clipboard and typing. Secrets reach them through stdin, never through command-line arguments.
+* `pasteboard.js` handles the clipboard; secrets reach it through stdin, never through command-line arguments. `dashlane/keyboard.py` types the login and password with Quartz keyboard events.
+* `dashlane/usage.py` remembers which items you use from Alfred (ids and times only) to order the results.
 
 ## License
 
